@@ -11,7 +11,7 @@
 - Theme presets: save and switch complete color/theme presets, including opaque non-translucent app themes.
 - Syntax highlighting research and toggle: evaluate existing web libraries such as Shiki, Prism, Highlight.js, or CodeMirror, then add notebook mode without highlighting and IDE mode with highlighting.
 - Selection polish: only code text should be selectable; UI chrome and line numbers should stay non-selectable.
-- Continue frontend decomposition: split remaining `main.js` responsibilities into focused modules for settings, typing input, audio, and completion flow.
+- Continue frontend decomposition: split remaining `main.js` responsibilities into focused modules for settings, typing input, and completion flow.
 - Write a useful README with the product idea, local development flow, Wails build flow, and current feature list.
 
 ## Later
@@ -33,3 +33,4 @@
 - Completion hotkeys: Enter starts the next random exercise, while Cmd+R restarts the current one.
 - Theme controls basics: background opacity and accent color.
 - Frontend decomposition start: extracted keyboard layout and key-mapping helpers into `frontend/src/keyboard.js`.
+- Frontend decomposition: extracted generated sound playback into `frontend/src/audio.js`.
