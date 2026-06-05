@@ -127,6 +127,16 @@ const physicalPunctuation = {
     Slash: ["/", "?"],
 };
 
+const settingsStorageKey = "codeTyper.settings.v1";
+
+const defaultSettings = {
+    layout: "qwerty",
+    speedUnit: "cpm",
+    showHints: true,
+    errorSoundEnabled: true,
+    keypressSoundEnabled: false,
+};
+
 const state = {
     exercises: [],
     selectedLanguage: "",
@@ -134,6 +144,8 @@ const state = {
     session: null,
     queue: Promise.resolve(),
     refreshing: false,
+    settings: loadSettings(),
+    audioContext: null,
 };
 
 document.body.innerHTML = `
@@ -146,7 +158,7 @@ document.body.innerHTML = `
         <div class="metrics" aria-label="Current exercise metrics">
             <div class="metric">
                 <span class="metric-value" id="speedValue">0</span>
-                <span class="metric-label">char/min</span>
+                <span class="metric-label" id="speedLabel">char/min</span>
             </div>
             <div class="metric">
                 <span class="metric-value" id="accuracyValue">100%</span>
@@ -156,6 +168,9 @@ document.body.innerHTML = `
                 <span class="metric-value" id="typosValue">0</span>
                 <span class="metric-label">typos</span>
             </div>
+        </div>
+        <div class="window-actions">
+            <button class="icon-button" id="settingsButton" type="button" aria-label="Settings" title="Settings">&#9881;</button>
         </div>
     </header>
 
@@ -183,16 +198,62 @@ document.body.innerHTML = `
 
         <div class="keyboard" id="keyboard" aria-hidden="true"></div>
     </section>
+
+    <div class="settings-modal" id="settingsModal" hidden>
+        <section class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+            <div class="settings-panel-header">
+                <h2 id="settingsTitle">Settings</h2>
+                <button class="icon-button compact" id="closeSettingsButton" type="button" aria-label="Close settings" title="Close">&times;</button>
+            </div>
+
+            <div class="settings-grid">
+                <label class="setting-field">
+                    <span>Layout</span>
+                    <select id="layoutSelect">
+                        <option value="qwerty">QWERTY</option>
+                    </select>
+                </label>
+                <label class="setting-field">
+                    <span>Speed</span>
+                    <select id="speedUnitSelect">
+                        <option value="cpm">Characters per minute</option>
+                        <option value="wpm">Words per minute</option>
+                    </select>
+                </label>
+                <label class="setting-toggle">
+                    <input id="showHintsInput" type="checkbox">
+                    <span>Show keyboard hints</span>
+                </label>
+                <label class="setting-toggle">
+                    <input id="errorSoundInput" type="checkbox">
+                    <span>Error sound</span>
+                </label>
+                <label class="setting-toggle">
+                    <input id="keypressSoundInput" type="checkbox">
+                    <span>Keypress sound</span>
+                </label>
+            </div>
+        </section>
+    </div>
 </main>
 `;
 
 const elements = {
     speedValue: document.getElementById("speedValue"),
+    speedLabel: document.getElementById("speedLabel"),
     accuracyValue: document.getElementById("accuracyValue"),
     typosValue: document.getElementById("typosValue"),
     languageSelect: document.getElementById("languageSelect"),
     exerciseSelect: document.getElementById("exerciseSelect"),
     restartButton: document.getElementById("restartButton"),
+    settingsButton: document.getElementById("settingsButton"),
+    settingsModal: document.getElementById("settingsModal"),
+    closeSettingsButton: document.getElementById("closeSettingsButton"),
+    layoutSelect: document.getElementById("layoutSelect"),
+    speedUnitSelect: document.getElementById("speedUnitSelect"),
+    showHintsInput: document.getElementById("showHintsInput"),
+    errorSoundInput: document.getElementById("errorSoundInput"),
+    keypressSoundInput: document.getElementById("keypressSoundInput"),
     progressFill: document.getElementById("progressFill"),
     codeEditor: document.getElementById("codeEditor"),
     keyboard: document.getElementById("keyboard"),
@@ -210,6 +271,8 @@ async function init() {
 
     renderLanguageOptions();
     renderExerciseOptions();
+    renderSettingsForm();
+    applySettings();
     renderKeyboard("");
 
     state.session = await StartExercise(state.selectedExerciseId);
@@ -237,8 +300,30 @@ function bindEvents() {
 
     elements.restartButton.addEventListener("click", startSelectedExercise);
     elements.codeEditor.addEventListener("click", () => elements.codeEditor.focus());
+    elements.settingsButton.addEventListener("click", openSettings);
+    elements.closeSettingsButton.addEventListener("click", closeSettings);
+    elements.settingsModal.addEventListener("click", (event) => {
+        if (event.target === elements.settingsModal) {
+            closeSettings();
+        }
+    });
+    elements.layoutSelect.addEventListener("change", handleSettingsChange);
+    elements.speedUnitSelect.addEventListener("change", handleSettingsChange);
+    elements.showHintsInput.addEventListener("change", handleSettingsChange);
+    elements.errorSoundInput.addEventListener("change", handleSettingsChange);
+    elements.keypressSoundInput.addEventListener("change", handleSettingsChange);
 
     window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !elements.settingsModal.hidden) {
+            event.preventDefault();
+            closeSettings();
+            return;
+        }
+
+        if (!elements.settingsModal.hidden) {
+            return;
+        }
+
         const action = normalizeKey(event);
         if (!action) {
             return;
@@ -256,10 +341,13 @@ async function startSelectedExercise() {
 }
 
 async function applyInput(action) {
+    const previousIndex = state.session?.stats.index ?? 0;
+
     if (action.type === "backspace") {
         state.session = await Backspace();
     } else {
         state.session = await HandleInput(action.value);
+        playInputSound(previousIndex);
     }
     render();
 }
@@ -340,7 +428,9 @@ function render() {
 
 function renderMetrics() {
     const stats = state.session.stats;
-    elements.speedValue.textContent = stats.speedCpm;
+    const speed = speedForCurrentUnit(stats.speedCpm);
+    elements.speedValue.textContent = speed.value;
+    elements.speedLabel.textContent = speed.label;
     elements.accuracyValue.textContent = `${stats.accuracy}%`;
     elements.typosValue.textContent = stats.typos;
     elements.progressFill.style.width = `${Math.max(0, Math.min(1, stats.progress)) * 100}%`;
@@ -510,4 +600,127 @@ function expectedKeys(expected) {
 
 function key(id, label, chars = [], width = 1, group = id) {
     return { id, label, chars, width, group };
+}
+
+function loadSettings() {
+    try {
+        const saved = localStorage.getItem(settingsStorageKey);
+        if (!saved) {
+            return { ...defaultSettings };
+        }
+        return { ...defaultSettings, ...JSON.parse(saved) };
+    } catch {
+        return { ...defaultSettings };
+    }
+}
+
+function saveSettings() {
+    localStorage.setItem(settingsStorageKey, JSON.stringify(state.settings));
+}
+
+function renderSettingsForm() {
+    elements.layoutSelect.value = state.settings.layout;
+    elements.speedUnitSelect.value = state.settings.speedUnit;
+    elements.showHintsInput.checked = state.settings.showHints;
+    elements.errorSoundInput.checked = state.settings.errorSoundEnabled;
+    elements.keypressSoundInput.checked = state.settings.keypressSoundEnabled;
+}
+
+function handleSettingsChange() {
+    state.settings = {
+        layout: elements.layoutSelect.value,
+        speedUnit: elements.speedUnitSelect.value,
+        showHints: elements.showHintsInput.checked,
+        errorSoundEnabled: elements.errorSoundInput.checked,
+        keypressSoundEnabled: elements.keypressSoundInput.checked,
+    };
+    saveSettings();
+    applySettings();
+}
+
+function applySettings() {
+    document.body.classList.toggle("hide-hints", !state.settings.showHints);
+    if (state.session) {
+        renderMetrics();
+    }
+}
+
+function openSettings() {
+    elements.settingsModal.hidden = false;
+    elements.speedUnitSelect.focus();
+}
+
+function closeSettings() {
+    elements.settingsModal.hidden = true;
+    elements.codeEditor.focus();
+}
+
+function speedForCurrentUnit(speedCpm) {
+    if (state.settings.speedUnit === "wpm") {
+        return {
+            value: Math.round(speedCpm / 5),
+            label: "words/min",
+        };
+    }
+    return {
+        value: speedCpm,
+        label: "char/min",
+    };
+}
+
+function playInputSound(index) {
+    const char = state.session?.render[index];
+    if (!char) {
+        return;
+    }
+
+    if (char.state === "incorrect") {
+        if (state.settings.errorSoundEnabled) {
+            playClickSound("error");
+        }
+        return;
+    }
+
+    if (state.settings.keypressSoundEnabled) {
+        playClickSound("key");
+    }
+}
+
+function playClickSound(kind) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+        return;
+    }
+
+    if (!state.audioContext) {
+        state.audioContext = new AudioContextClass();
+    }
+
+    const context = state.audioContext;
+    if (context.state === "suspended") {
+        context.resume();
+    }
+
+    const now = context.currentTime;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const filter = context.createBiquadFilter();
+
+    oscillator.type = kind === "error" ? "square" : "triangle";
+    oscillator.frequency.setValueAtTime(kind === "error" ? 135 : 880, now);
+    oscillator.frequency.exponentialRampToValueAtTime(kind === "error" ? 84 : 520, now + 0.055);
+
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(kind === "error" ? 900 : 1800, now);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(kind === "error" ? 0.08 : 0.025, now + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
+
+    oscillator.connect(filter);
+    filter.connect(gain);
+    gain.connect(context.destination);
+
+    oscillator.start(now);
+    oscillator.stop(now + 0.08);
 }

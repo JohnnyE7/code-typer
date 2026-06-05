@@ -45,6 +45,12 @@ select {
     font: inherit;
 }
 
+button,
+select,
+input {
+    --wails-draggable: no-drag;
+}
+
 .app-shell {
     min-width: 920px;
     height: 100vh;
@@ -85,6 +91,41 @@ select {
     display: flex;
     justify-content: center;
     gap: clamp(48px, 7vw, 96px);
+}
+
+.window-actions {
+    display: flex;
+    justify-content: end;
+    align-items: start;
+    align-self: stretch;
+    padding-top: 2px;
+}
+
+.icon-button {
+    width: 38px;
+    height: 38px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.icon-button.compact {
+    width: 32px;
+    height: 32px;
+    font-size: 22px;
+}
+
+.icon-button:hover,
+.icon-button:focus {
+    border-color: var(--line-strong);
+    background: rgba(255, 255, 255, 0.14);
+    color: var(--text);
 }
 
 .metric {
@@ -323,6 +364,14 @@ select:focus,
     --wails-draggable: no-drag;
 }
 
+.hide-hints .keyboard {
+    display: none;
+}
+
+.hide-hints .workspace {
+    grid-template-rows: auto minmax(320px, 1fr) 0;
+}
+
 .keyboard-row {
     display: flex;
     gap: 8px;
@@ -348,6 +397,84 @@ select:focus,
     background: rgba(87, 166, 255, 0.68);
     color: #ffffff;
     box-shadow: 0 0 24px rgba(87, 166, 255, 0.28);
+}
+
+.settings-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    padding: 32px;
+    background: rgba(0, 0, 0, 0.24);
+    backdrop-filter: blur(10px);
+    --wails-draggable: no-drag;
+}
+
+.settings-modal[hidden] {
+    display: none;
+}
+
+.settings-panel {
+    width: min(480px, 100%);
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: rgba(28, 30, 34, 0.96);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+}
+
+.settings-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 18px 4px 22px;
+}
+
+.settings-panel h2 {
+    margin: 0;
+    color: var(--text);
+    font-size: 20px;
+    line-height: 1.2;
+}
+
+.settings-grid {
+    display: grid;
+    gap: 16px;
+    padding: 20px 22px 24px;
+}
+
+.setting-field {
+    text-transform: none;
+    font-size: 13px;
+}
+
+.setting-field select {
+    width: 100%;
+}
+
+.setting-toggle {
+    min-height: 32px;
+    display: flex;
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    color: var(--text);
+    font-size: 14px;
+    text-transform: none;
+}
+
+.setting-toggle span {
+    order: 1;
+}
+
+.setting-toggle input {
+    order: 2;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    accent-color: var(--accent);
 }
 
 @media (max-height: 760px) {
