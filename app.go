@@ -3,53 +3,93 @@ package main
 import (
 	"code-typer/engine"
 	"context"
+	"sync"
 )
 
 type App struct {
-	ctx    context.Context
-	engine *engine.Engine
+	ctx context.Context
+	mu  sync.Mutex
+
+	engine  *engine.Engine
+	current Exercise
 }
 
-// Запуск упражнения
-func (a *App) StartExercise(text string) {
-	a.engine = engine.NewEngine(text)
+type AppState struct {
+	Exercise Exercise            `json:"exercise"`
+	Render   []engine.RenderChar `json:"render"`
+	Stats    engine.Stats        `json:"stats"`
+	Expected string              `json:"expected"`
 }
 
-// Обработка нажатия
-func (a *App) KeyPress(key string) {
-	if a.engine == nil || len(key) == 0 {
-		return
-	}
-	r := []rune(key)[0]
-	a.engine.HandleKey(r)
+func NewApp() *App {
+	return &App{}
 }
 
-// Обработка Backspace
-func (a *App) Backspace() {
-	if a.engine == nil {
-		return
-	}
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+}
+
+func (a *App) ListExercises() []Exercise {
+	return exercises
+}
+
+func (a *App) StartExercise(id string) AppState {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	exercise := findExercise(id)
+	a.current = exercise
+	a.engine = engine.NewEngine(exercise.Code)
+
+	return a.stateLocked()
+}
+
+func (a *App) HandleInput(input string) AppState {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.ensureSessionLocked()
+	a.engine.HandleInput(input)
+
+	return a.stateLocked()
+}
+
+func (a *App) Backspace() AppState {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.ensureSessionLocked()
 	a.engine.Backspace()
+
+	return a.stateLocked()
 }
 
-// Получение состояния для UI
-func (a *App) GetRender() []engine.RenderChar {
-	if a.engine == nil {
-		return nil
-	}
-	return a.engine.Render()
+func (a *App) GetSession() AppState {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.ensureSessionLocked()
+	return a.stateLocked()
 }
 
-// Получение статистики
-func (a *App) GetStats() map[string]int {
-	if a.engine == nil {
-		return map[string]int{
-			"Index": 0,
-			"Typos": 0,
-		}
+func (a *App) ensureSessionLocked() {
+	if a.engine != nil {
+		return
 	}
-	return map[string]int{
-		"Index": a.engine.Index,
-		"Typos": a.engine.Typos,
+
+	a.current = findExercise("")
+	a.engine = engine.NewEngine(a.current.Code)
+}
+
+func (a *App) stateLocked() AppState {
+	if a.engine == nil {
+		return AppState{}
+	}
+
+	return AppState{
+		Exercise: a.current,
+		Render:   a.engine.Render(),
+		Stats:    a.engine.Stats(),
+		Expected: a.engine.Expected(),
 	}
 }

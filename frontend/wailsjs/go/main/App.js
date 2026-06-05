@@ -6,16 +6,16 @@ export function Backspace() {
   return window['go']['main']['App']['Backspace']();
 }
 
-export function GetRender() {
-  return window['go']['main']['App']['GetRender']();
+export function GetSession() {
+  return window['go']['main']['App']['GetSession']();
 }
 
-export function GetStats() {
-  return window['go']['main']['App']['GetStats']();
+export function HandleInput(arg1) {
+  return window['go']['main']['App']['HandleInput'](arg1);
 }
 
-export function KeyPress(arg1) {
-  return window['go']['main']['App']['KeyPress'](arg1);
+export function ListExercises() {
+  return window['go']['main']['App']['ListExercises']();
 }
 
 export function StartExercise(arg1) {

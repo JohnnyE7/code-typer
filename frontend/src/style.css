@@ -1,17 +1,3 @@
-html {
-    background-color: rgba(27, 38, 54, 1);
-    text-align: center;
-    color: white;
-}
-
-body {
-    margin: 0;
-    color: white;
-    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
-    "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
-}
-
 @font-face {
     font-family: "Nunito";
     font-style: normal;
@@ -20,7 +6,354 @@ body {
     url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
 }
 
-#app {
+:root {
+    color-scheme: dark;
+    --bg: #171819;
+    --panel: rgba(35, 37, 39, 0.82);
+    --panel-strong: rgba(43, 45, 48, 0.92);
+    --line: rgba(255, 255, 255, 0.1);
+    --line-strong: rgba(255, 255, 255, 0.18);
+    --text: #eef1f4;
+    --muted: #8c929b;
+    --pending: #5d626a;
+    --correct: #f4f7fa;
+    --incorrect: #ff5168;
+    --accent: #57a6ff;
+    --accent-strong: #2f8af6;
+    --ok: #45d483;
+    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 16px;
+    letter-spacing: 0;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0);
+    color: var(--text);
+}
+
+button,
+select {
+    font: inherit;
+}
+
+.app-shell {
+    min-width: 920px;
     height: 100vh;
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    background:
+        linear-gradient(135deg, rgba(88, 47, 30, 0.36), rgba(14, 48, 72, 0.56) 42%, rgba(27, 24, 74, 0.66)),
+        rgba(17, 18, 22, 0.72);
+    backdrop-filter: blur(28px) saturate(1.18);
+}
+
+.top-bar {
+    min-height: 112px;
+    display: grid;
+    grid-template-columns: 220px 1fr 220px;
+    align-items: center;
+    padding: 22px 32px 12px 96px;
+    --wails-draggable: drag;
+}
+
+.brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 15px;
+}
+
+.brand-mark {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    background: var(--accent);
+    box-shadow: 0 0 18px rgba(87, 166, 255, 0.45);
+}
+
+.metrics {
+    display: flex;
+    justify-content: center;
+    gap: clamp(48px, 7vw, 96px);
+}
+
+.metric {
+    min-width: 128px;
+    display: grid;
+    gap: 2px;
+    justify-items: start;
+}
+
+.metric-value {
+    color: var(--text);
+    font-size: 48px;
+    line-height: 0.95;
+    font-variant-numeric: tabular-nums;
+}
+
+.metric-label {
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.workspace {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(220px, 1fr) auto;
+    gap: 18px;
+    padding: 0 32px 28px;
+}
+
+.editor-bar {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 18px;
+    --wails-draggable: no-drag;
+}
+
+.selectors {
+    display: flex;
+    gap: 14px;
+    align-items: end;
+}
+
+label {
+    display: grid;
+    gap: 7px;
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+select,
+.text-button {
+    height: 36px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--panel-strong);
+    color: var(--text);
+    outline: none;
+}
+
+select {
+    min-width: 184px;
+    padding: 0 34px 0 12px;
+}
+
+select:focus,
+.text-button:focus {
+    border-color: var(--accent);
+}
+
+.text-button {
+    padding: 0 14px;
+    cursor: pointer;
+}
+
+.text-button:hover {
+    border-color: var(--line-strong);
+    background: rgba(58, 61, 65, 0.96);
+}
+
+.editor-shell {
+    min-height: 0;
+    display: grid;
+    grid-template-rows: 3px 1fr;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    backdrop-filter: blur(14px);
+}
+
+.progress-track {
+    height: 3px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.progress-fill {
+    width: 0;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--ok));
+    transition: width 120ms ease-out;
+}
+
+.code-editor {
+    min-height: 0;
+    overflow: auto;
+    padding: 22px 0 28px;
+    outline: none;
+    tab-size: 4;
+    font-family: "SFMono-Regular", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 18px;
+    line-height: 1.65;
+    font-variant-ligatures: none;
+    --wails-draggable: no-drag;
+}
+
+.code-row {
+    min-height: 30px;
+    display: grid;
+    grid-template-columns: 62px 1fr;
+    align-items: start;
+}
+
+.line-number {
+    padding: 0 18px 0 0;
+    color: rgba(255, 255, 255, 0.24);
+    text-align: right;
+    user-select: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.code-line {
+    min-width: max-content;
+    padding-right: 28px;
+    white-space: pre;
+}
+
+.code-char {
+    position: relative;
+    min-width: 0.6ch;
+    color: var(--pending);
+    border-radius: 3px;
+}
+
+.code-char.correct {
+    color: var(--correct);
+}
+
+.code-char.incorrect {
+    color: var(--incorrect);
+}
+
+.code-char.cursor {
+    color: var(--text);
+    background: rgba(87, 166, 255, 0.28);
+    box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.space-char {
+    display: inline-block;
+    width: 1ch;
+    height: 1.15em;
+    vertical-align: -0.16em;
+}
+
+.space-char.cursor {
+    background: rgba(87, 166, 255, 0.34);
+    box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.space-char.correct {
+    background: rgba(244, 247, 250, 0.08);
+}
+
+.space-char.incorrect {
+    background: rgba(255, 81, 104, 0.9);
+    box-shadow: 0 0 14px rgba(255, 81, 104, 0.22);
+}
+
+.newline-char {
+    display: inline-block;
+    width: 54px;
+}
+
+.newline-char::after {
+    content: "return";
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.36);
+    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 10px;
+    line-height: 1;
+}
+
+.newline-char.correct::after {
+    color: rgba(244, 247, 250, 0.54);
+}
+
+.newline-char.incorrect::after {
+    color: var(--incorrect);
+}
+
+.tail-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1.2em;
+    margin-left: 2px;
+    vertical-align: -0.2em;
+    background: var(--accent);
+}
+
+.keyboard {
+    width: min(1180px, 100%);
+    justify-self: center;
+    display: grid;
+    gap: 8px;
+    padding-top: 2px;
+    user-select: none;
+    --wails-draggable: no-drag;
+}
+
+.keyboard-row {
+    display: flex;
+    gap: 8px;
+}
+
+.keyboard-key {
+    height: 48px;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.035);
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: none;
+}
+
+.keyboard-key.active {
+    border-color: rgba(87, 166, 255, 0.86);
+    background: rgba(87, 166, 255, 0.68);
+    color: #ffffff;
+    box-shadow: 0 0 24px rgba(87, 166, 255, 0.28);
+}
+
+@media (max-height: 760px) {
+    .top-bar {
+        min-height: 90px;
+        padding-top: 16px;
+    }
+
+    .metric-value {
+        font-size: 38px;
+    }
+
+    .keyboard-key {
+        height: 40px;
+    }
+
+    .code-editor {
+        font-size: 16px;
+        line-height: 1.55;
+    }
 }
