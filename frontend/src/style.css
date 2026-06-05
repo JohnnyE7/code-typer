@@ -19,6 +19,7 @@
     --correct: #f4f7fa;
     --incorrect: #ff5168;
     --accent: #57a6ff;
+    --accent-rgb: 87, 166, 255;
     --accent-strong: #2f8af6;
     --ok: #45d483;
     --indent-size: 4;
@@ -272,7 +273,7 @@ select:focus,
 
 .code-char.cursor {
     color: var(--text);
-    background: rgba(87, 166, 255, 0.28);
+    background: rgba(var(--accent-rgb), 0.28);
     box-shadow: inset 0 -2px 0 var(--accent);
 }
 
@@ -284,7 +285,7 @@ select:focus,
 }
 
 .space-char.cursor {
-    background: rgba(87, 166, 255, 0.34);
+    background: rgba(var(--accent-rgb), 0.34);
     box-shadow: inset 0 -2px 0 var(--accent);
 }
 
@@ -382,17 +383,17 @@ select:focus,
 }
 
 .keyboard-key.expected {
-    border-color: rgba(87, 166, 255, 0.86);
+    border-color: rgba(var(--accent-rgb), 0.86);
     color: #ffffff;
-    box-shadow: 0 0 24px rgba(87, 166, 255, 0.28);
+    box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.28);
     animation: expected-key-pulse 1.05s ease-in-out infinite;
 }
 
 .keyboard-key.pressed {
-    border-color: rgba(87, 166, 255, 0.96);
-    background: rgba(87, 166, 255, 0.76);
+    border-color: rgba(var(--accent-rgb), 0.96);
+    background: rgba(var(--accent-rgb), 0.76);
     color: #ffffff;
-    box-shadow: 0 0 28px rgba(87, 166, 255, 0.34);
+    box-shadow: 0 0 28px rgba(var(--accent-rgb), 0.34);
     animation: none;
 }
 
@@ -405,10 +406,10 @@ select:focus,
 }
 
 .keyboard-key.held {
-    border-color: rgba(87, 166, 255, 0.96);
-    background: rgba(87, 166, 255, 0.62);
+    border-color: rgba(var(--accent-rgb), 0.96);
+    background: rgba(var(--accent-rgb), 0.62);
     color: #ffffff;
-    box-shadow: 0 0 24px rgba(87, 166, 255, 0.28);
+    box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.28);
     animation: none;
 }
 
@@ -434,11 +435,11 @@ select:focus,
 @keyframes expected-key-pulse {
     0%,
     100% {
-        background: rgba(87, 166, 255, 0.22);
+        background: rgba(var(--accent-rgb), 0.22);
     }
 
     50% {
-        background: rgba(87, 166, 255, 0.68);
+        background: rgba(var(--accent-rgb), 0.68);
     }
 }
 
@@ -511,6 +512,21 @@ select:focus,
     width: 100%;
     margin: 2px 0 0;
     accent-color: var(--accent);
+}
+
+.color-input {
+    width: 100%;
+    height: 38px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--panel-strong);
+    cursor: pointer;
+}
+
+.color-input:focus {
+    border-color: var(--accent);
+    outline: none;
 }
 
 .setting-toggle {

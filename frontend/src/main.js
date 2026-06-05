@@ -199,6 +199,7 @@ const defaultSettings = {
     speedUnit: "cpm",
     indentationSize: 4,
     backgroundOpacity: 58,
+    accentColor: "#57a6ff",
     inputMode: "notebook",
     showHints: true,
     errorSoundEnabled: true,
@@ -259,7 +260,7 @@ document.body.innerHTML = `
                     <select id="exerciseSelect"></select>
                 </label>
             </div>
-            <button class="text-button" id="restartButton" type="button">Restart</button>
+            <button class="text-button" id="restartButton" type="button">Restart (Cmd+R)</button>
         </div>
 
         <div class="editor-shell">
@@ -310,6 +311,10 @@ document.body.innerHTML = `
                     <input id="backgroundOpacityInput" type="range" min="40" max="85" step="1">
                 </label>
                 <label class="setting-field">
+                    <span>Accent color</span>
+                    <input class="color-input" id="accentColorInput" type="color">
+                </label>
+                <label class="setting-field">
                     <span>Input mode</span>
                     <select id="inputModeSelect">
                         <option value="notebook">Notebook</option>
@@ -350,6 +355,7 @@ const elements = {
     indentationSizeSelect: document.getElementById("indentationSizeSelect"),
     backgroundOpacityInput: document.getElementById("backgroundOpacityInput"),
     backgroundOpacityValue: document.getElementById("backgroundOpacityValue"),
+    accentColorInput: document.getElementById("accentColorInput"),
     inputModeSelect: document.getElementById("inputModeSelect"),
     showHintsInput: document.getElementById("showHintsInput"),
     errorSoundInput: document.getElementById("errorSoundInput"),
@@ -412,6 +418,7 @@ function bindEvents() {
     elements.speedUnitSelect.addEventListener("change", handleSettingsChange);
     elements.indentationSizeSelect.addEventListener("change", handleSettingsChange);
     elements.backgroundOpacityInput.addEventListener("input", handleSettingsChange);
+    elements.accentColorInput.addEventListener("input", handleSettingsChange);
     elements.inputModeSelect.addEventListener("change", handleSettingsChange);
     elements.showHintsInput.addEventListener("change", handleSettingsChange);
     elements.errorSoundInput.addEventListener("change", handleSettingsChange);
@@ -425,6 +432,12 @@ function bindEvents() {
         }
 
         if (!elements.settingsModal.hidden) {
+            return;
+        }
+
+        if (isRestartShortcut(event)) {
+            event.preventDefault();
+            state.queue = state.queue.then(() => restartCurrentExercise(["command-left", "r"]));
             return;
         }
 
@@ -468,11 +481,28 @@ async function startSelectedExercise() {
     elements.codeEditor.focus();
 }
 
+async function startRandomExerciseFromActivePool() {
+    const pool = filteredExercises();
+    if (pool.length === 0) {
+        await startSelectedExercise();
+        return;
+    }
+
+    const candidates = pool.length > 1
+        ? pool.filter((exercise) => exercise.id !== state.selectedExerciseId)
+        : pool;
+    const nextExercise = candidates[Math.floor(Math.random() * candidates.length)];
+
+    state.selectedExerciseId = nextExercise.id;
+    renderExerciseOptions();
+    await startSelectedExercise();
+}
+
 async function applyInput(action) {
     if (state.session?.stats.complete) {
         if (action.type === "input" && action.source === "enter") {
             flashKeys(action.keyIds, "pressed");
-            await startSelectedExercise();
+            await startRandomExerciseFromActivePool();
         }
         return;
     }
@@ -592,6 +622,15 @@ function inputForAction(action) {
     }
 
     return action.value + closingPair;
+}
+
+function isRestartShortcut(event) {
+    return event.metaKey && event.code === "KeyR" && !event.ctrlKey && !event.altKey;
+}
+
+async function restartCurrentExercise(keyIds = []) {
+    flashKeys(keyIds, "pressed");
+    await startSelectedExercise();
 }
 
 function mistakeKeysForInput(index, length) {
@@ -922,6 +961,7 @@ function renderSettingsForm() {
     elements.indentationSizeSelect.value = String(state.settings.indentationSize);
     elements.backgroundOpacityInput.value = String(normalizedBackgroundOpacity());
     elements.backgroundOpacityValue.textContent = `${normalizedBackgroundOpacity()}%`;
+    elements.accentColorInput.value = normalizedAccentColor();
     elements.inputModeSelect.value = state.settings.inputMode;
     elements.showHintsInput.checked = state.settings.showHints;
     elements.errorSoundInput.checked = state.settings.errorSoundEnabled;
@@ -934,6 +974,7 @@ function handleSettingsChange() {
         speedUnit: elements.speedUnitSelect.value,
         indentationSize: Number(elements.indentationSizeSelect.value),
         backgroundOpacity: Number(elements.backgroundOpacityInput.value),
+        accentColor: elements.accentColorInput.value,
         inputMode: elements.inputModeSelect.value,
         showHints: elements.showHintsInput.checked,
         errorSoundEnabled: elements.errorSoundInput.checked,
@@ -947,6 +988,7 @@ function applySettings() {
     document.body.classList.toggle("hide-hints", !state.settings.showHints);
     document.documentElement.style.setProperty("--indent-size", state.settings.indentationSize);
     applyBackgroundOpacity();
+    applyAccentColor();
     if (state.session) {
         renderMetrics();
     }
@@ -962,6 +1004,17 @@ function applyBackgroundOpacity() {
     root.style.setProperty("--app-warm-opacity", (opacity * 0.5).toFixed(2));
     root.style.setProperty("--app-mid-opacity", (opacity * 0.75).toFixed(2));
     root.style.setProperty("--app-cool-opacity", (opacity * 0.9).toFixed(2));
+}
+
+function applyAccentColor() {
+    const color = normalizedAccentColor();
+    const rgb = hexToRgb(color);
+    const strong = mixRgb(rgb, { r: 20, g: 35, b: 55 }, 0.24);
+    const root = document.documentElement;
+
+    root.style.setProperty("--accent", color);
+    root.style.setProperty("--accent-rgb", `${rgb.r}, ${rgb.g}, ${rgb.b}`);
+    root.style.setProperty("--accent-strong", rgbToHex(strong));
 }
 
 function openSettings() {
@@ -993,6 +1046,36 @@ function normalizedBackgroundOpacity() {
         return defaultSettings.backgroundOpacity;
     }
     return Math.max(40, Math.min(85, value));
+}
+
+function normalizedAccentColor() {
+    const value = String(state.settings.accentColor ?? defaultSettings.accentColor);
+    return /^#[0-9a-f]{6}$/i.test(value) ? value : defaultSettings.accentColor;
+}
+
+function hexToRgb(hex) {
+    const value = hex.replace("#", "");
+    return {
+        r: parseInt(value.slice(0, 2), 16),
+        g: parseInt(value.slice(2, 4), 16),
+        b: parseInt(value.slice(4, 6), 16),
+    };
+}
+
+function mixRgb(color, target, amount) {
+    return {
+        r: Math.round(color.r + (target.r - color.r) * amount),
+        g: Math.round(color.g + (target.g - color.g) * amount),
+        b: Math.round(color.b + (target.b - color.b) * amount),
+    };
+}
+
+function rgbToHex(color) {
+    return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}`;
+}
+
+function toHex(value) {
+    return Math.max(0, Math.min(255, value)).toString(16).padStart(2, "0");
 }
 
 function shiftKeyFor(baseKey) {

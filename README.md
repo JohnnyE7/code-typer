@@ -1,19 +1,99 @@
-# README
+# Code Typer
 
-## About
+Offline desktop typing trainer for programmers, built with Go, Wails, and a vanilla JavaScript frontend.
 
-This is the official Wails Vanilla template.
+The goal is not to teach algorithms. The goal is to make code syntax feel automatic: braces, tabs, returns, map access, channels, loops, function signatures, and common snippets should become muscle memory.
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+## Current Features
 
-## Live Development
+- Desktop app powered by Wails.
+- Offline exercise list with Go, JavaScript, and Python snippets.
+- Physical QWERTY key handling, so typing works even when the OS input language is not English.
+- Code-editor style typing surface with line numbers.
+- Current speed, accuracy, typo count, and progress bar.
+- Keyboard hints for expected keys, pressed keys, service keys, and mistakes.
+- Completion heatmap based on all mistakes made during the exercise, including mistakes fixed with Backspace.
+- Settings for speed unit, tab width, input mode, keyboard hints, generated sounds, background opacity, and accent color.
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+## Product Direction
 
-## Building
+Code Typer is intended to stay minimal and offline-first.
 
-To build a redistributable, production mode package, use `wails build`.
+Planned work lives in:
+
+- `ROADMAP.md`
+- `ROADMAP_RUS.md`
+
+Russian README:
+
+- `README_RUS.md`
+
+Near-term direction:
+
+- Persistent session statistics and charts.
+- Exercise pools and topic-focused snippet packs.
+- Flexible tab input: accept either a real Tab or configured spaces where appropriate.
+- Typed-buffer model for more IDE-like handling of wrong characters before newlines.
+- Custom sounds, theme presets, syntax highlighting, and user snippet imports.
+
+## Development
+
+Requirements:
+
+- Go
+- Node.js and npm
+- Wails v2 CLI
+
+Install frontend dependencies:
+
+```sh
+cd frontend
+npm install
+```
+
+Run the app in development mode:
+
+```sh
+wails dev
+```
+
+Wails also exposes a browser development target, usually:
+
+```txt
+http://localhost:34115
+```
+
+Use that URL when you need browser devtools while still calling bound Go methods.
+
+## Build
+
+Build the desktop app:
+
+```sh
+wails build
+```
+
+On macOS the binary is produced under:
+
+```txt
+build/bin/code-typer.app
+```
+
+## Verification
+
+Useful checks before committing:
+
+```sh
+cd frontend
+npm run build
+```
+
+```sh
+go test ./...
+```
+
+```sh
+wails build
+```
+
+If Go embed cache complains about an old Vite asset hash after a frontend build, rerun `go test` with a fresh `GOCACHE` or run it after the frontend build has fully finished.
