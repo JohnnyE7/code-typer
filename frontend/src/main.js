@@ -56,7 +56,7 @@ const keyboardLayout = [
         key("enter", "enter", [], 1.85),
     ],
     [
-        key("shift-left", "shift", [], 2.2, "shift"),
+        key("shift-left", "shift", [], 2.2),
         key("z", "Z", ["z", "Z"]),
         key("x", "X", ["x", "X"]),
         key("c", "C", ["c", "C"]),
@@ -67,7 +67,7 @@ const keyboardLayout = [
         key(",", ",", [",", "<"]),
         key(".", ".", [".", ">"]),
         key("/", "/", ["/", "?"]),
-        key("shift-right", "shift", [], 2.35, "shift"),
+        key("shift-right", "shift", [], 2.35),
     ],
     [
         key("control", "control", [], 1.15),
@@ -127,11 +127,77 @@ const physicalPunctuation = {
     Slash: ["/", "?"],
 };
 
+const keyIdByCode = {
+    Backquote: "`",
+    Digit1: "1",
+    Digit2: "2",
+    Digit3: "3",
+    Digit4: "4",
+    Digit5: "5",
+    Digit6: "6",
+    Digit7: "7",
+    Digit8: "8",
+    Digit9: "9",
+    Digit0: "0",
+    Minus: "-",
+    Equal: "=",
+    Backspace: "backspace",
+    Tab: "tab",
+    KeyQ: "q",
+    KeyW: "w",
+    KeyE: "e",
+    KeyR: "r",
+    KeyT: "t",
+    KeyY: "y",
+    KeyU: "u",
+    KeyI: "i",
+    KeyO: "o",
+    KeyP: "p",
+    BracketLeft: "[",
+    BracketRight: "]",
+    Backslash: "\\",
+    KeyA: "a",
+    KeyS: "s",
+    KeyD: "d",
+    KeyF: "f",
+    KeyG: "g",
+    KeyH: "h",
+    KeyJ: "j",
+    KeyK: "k",
+    KeyL: "l",
+    Semicolon: ";",
+    Quote: "'",
+    Enter: "enter",
+    KeyZ: "z",
+    KeyX: "x",
+    KeyC: "c",
+    KeyV: "v",
+    KeyB: "b",
+    KeyN: "n",
+    KeyM: "m",
+    Comma: ",",
+    Period: ".",
+    Slash: "/",
+    Space: "space",
+};
+
+const leftHandKeys = new Set(["`", "1", "2", "3", "4", "5", "q", "w", "e", "r", "t", "a", "s", "d", "f", "g", "z", "x", "c", "v", "b"]);
+const closingPairByOpen = {
+    "(": ")",
+    "[": "]",
+    "{": "}",
+    "\"": "\"",
+    "'": "'",
+};
+
 const settingsStorageKey = "codeTyper.settings.v1";
 
 const defaultSettings = {
     layout: "qwerty",
     speedUnit: "cpm",
+    indentationStyle: "tabs",
+    indentationSize: 4,
+    inputMode: "notebook",
     showHints: true,
     errorSoundEnabled: true,
     keypressSoundEnabled: false,
@@ -144,6 +210,9 @@ const state = {
     session: null,
     queue: Promise.resolve(),
     refreshing: false,
+    pressedKeys: new Set(),
+    errorKeys: new Set(),
+    keyFeedbackTimers: new Map(),
     settings: loadSettings(),
     audioContext: null,
 };
@@ -220,6 +289,27 @@ document.body.innerHTML = `
                         <option value="wpm">Words per minute</option>
                     </select>
                 </label>
+                <label class="setting-field">
+                    <span>Indentation</span>
+                    <select id="indentationStyleSelect">
+                        <option value="tabs">Tabs</option>
+                        <option value="spaces">Spaces</option>
+                    </select>
+                </label>
+                <label class="setting-field">
+                    <span>Indent size</span>
+                    <select id="indentationSizeSelect">
+                        <option value="2">2 spaces</option>
+                        <option value="4">4 spaces</option>
+                    </select>
+                </label>
+                <label class="setting-field">
+                    <span>Input mode</span>
+                    <select id="inputModeSelect">
+                        <option value="notebook">Notebook</option>
+                        <option value="ide">IDE auto-pairs</option>
+                    </select>
+                </label>
                 <label class="setting-toggle">
                     <input id="showHintsInput" type="checkbox">
                     <span>Show keyboard hints</span>
@@ -251,6 +341,9 @@ const elements = {
     closeSettingsButton: document.getElementById("closeSettingsButton"),
     layoutSelect: document.getElementById("layoutSelect"),
     speedUnitSelect: document.getElementById("speedUnitSelect"),
+    indentationStyleSelect: document.getElementById("indentationStyleSelect"),
+    indentationSizeSelect: document.getElementById("indentationSizeSelect"),
+    inputModeSelect: document.getElementById("inputModeSelect"),
     showHintsInput: document.getElementById("showHintsInput"),
     errorSoundInput: document.getElementById("errorSoundInput"),
     keypressSoundInput: document.getElementById("keypressSoundInput"),
@@ -309,6 +402,9 @@ function bindEvents() {
     });
     elements.layoutSelect.addEventListener("change", handleSettingsChange);
     elements.speedUnitSelect.addEventListener("change", handleSettingsChange);
+    elements.indentationStyleSelect.addEventListener("change", handleSettingsChange);
+    elements.indentationSizeSelect.addEventListener("change", handleSettingsChange);
+    elements.inputModeSelect.addEventListener("change", handleSettingsChange);
     elements.showHintsInput.addEventListener("change", handleSettingsChange);
     elements.errorSoundInput.addEventListener("change", handleSettingsChange);
     elements.keypressSoundInput.addEventListener("change", handleSettingsChange);
@@ -329,6 +425,7 @@ function bindEvents() {
             return;
         }
 
+        action.keyIds = keyIdsForEvent(event);
         event.preventDefault();
         state.queue = state.queue.then(() => applyInput(action));
     });
@@ -345,8 +442,11 @@ async function applyInput(action) {
 
     if (action.type === "backspace") {
         state.session = await Backspace();
+        flashKeys(action.keyIds, "pressed");
     } else {
-        state.session = await HandleInput(action.value);
+        const input = inputForAction(action);
+        state.session = await HandleInput(input);
+        flashKeys(action.keyIds, inputHasError(previousIndex, input.length) ? "error" : "pressed");
         playInputSound(previousIndex);
     }
     render();
@@ -383,15 +483,15 @@ function normalizeKey(event) {
         return { type: "backspace" };
     }
     if (event.code === "Enter") {
-        return { type: "input", value: "\n" };
+        return { type: "input", value: "\n", source: "enter" };
     }
     if (event.code === "Tab") {
-        return { type: "input", value: "\t" };
+        return { type: "input", value: configuredIndent(), source: "tab" };
     }
 
     const physicalChar = physicalCodeToChar(event);
     if (physicalChar) {
-        return { type: "input", value: physicalChar };
+        return { type: "input", value: physicalChar, source: "key" };
     }
 
     return null;
@@ -414,6 +514,53 @@ function physicalCodeToChar(event) {
     }
 
     return "";
+}
+
+function keyIdsForEvent(event) {
+    const keyId = keyIdByCode[event.code];
+    if (!keyId) {
+        return [];
+    }
+
+    const keys = [keyId];
+    const shiftedChar = physicalCodeToChar(event);
+    const needsShift = Boolean(event.shiftKey && shiftedChar && shiftedChar !== shiftedChar.toLowerCase())
+        || Boolean(event.shiftKey && shiftMap[shiftedChar]);
+
+    if (needsShift) {
+        keys.push(shiftKeyFor(keyId));
+    }
+
+    return keys;
+}
+
+function inputForAction(action) {
+    if (!state.session?.expected) {
+        return action.value;
+    }
+
+    if (action.source === "tab" && /^ +$/.test(action.value) && state.session.expected === "\t") {
+        return "\t";
+    }
+
+    if (state.settings.inputMode !== "ide") {
+        return action.value;
+    }
+
+    const expected = state.session.expected;
+    const closingPair = closingPairByOpen[action.value];
+    const nextChar = state.session.render[state.session.stats.index + 1]?.char;
+    if (!closingPair || expected !== action.value || nextChar !== closingPair) {
+        return action.value;
+    }
+
+    return action.value + closingPair;
+}
+
+function inputHasError(index, length) {
+    return state.session.render
+        .slice(index, index + length)
+        .some((char) => char.state === "incorrect");
 }
 
 function render() {
@@ -553,8 +700,14 @@ function renderKeyboard(expected) {
             keyEl.className = "keyboard-key";
             keyEl.style.flex = String(item.width);
             keyEl.textContent = item.label;
-            if (activeKeys.has(item.id) || activeKeys.has(item.group)) {
-                keyEl.classList.add("active");
+            if (activeKeys.has(item.id)) {
+                keyEl.classList.add("expected");
+            }
+            if (state.pressedKeys.has(item.id)) {
+                keyEl.classList.add("pressed");
+            }
+            if (state.errorKeys.has(item.id)) {
+                keyEl.classList.add("error");
             }
             rowEl.appendChild(keyEl);
         });
@@ -583,14 +736,16 @@ function expectedKeys(expected) {
     }
 
     if (/[A-Z]/.test(expected)) {
-        keys.add("shift");
-        keys.add(expected.toLowerCase());
+        const baseKey = expected.toLowerCase();
+        keys.add(shiftKeyFor(baseKey));
+        keys.add(baseKey);
         return keys;
     }
 
     if (shiftMap[expected]) {
-        keys.add("shift");
-        keys.add(shiftMap[expected]);
+        const baseKey = shiftMap[expected];
+        keys.add(shiftKeyFor(baseKey));
+        keys.add(baseKey);
         return keys;
     }
 
@@ -621,6 +776,9 @@ function saveSettings() {
 function renderSettingsForm() {
     elements.layoutSelect.value = state.settings.layout;
     elements.speedUnitSelect.value = state.settings.speedUnit;
+    elements.indentationStyleSelect.value = state.settings.indentationStyle;
+    elements.indentationSizeSelect.value = String(state.settings.indentationSize);
+    elements.inputModeSelect.value = state.settings.inputMode;
     elements.showHintsInput.checked = state.settings.showHints;
     elements.errorSoundInput.checked = state.settings.errorSoundEnabled;
     elements.keypressSoundInput.checked = state.settings.keypressSoundEnabled;
@@ -630,6 +788,9 @@ function handleSettingsChange() {
     state.settings = {
         layout: elements.layoutSelect.value,
         speedUnit: elements.speedUnitSelect.value,
+        indentationStyle: elements.indentationStyleSelect.value,
+        indentationSize: Number(elements.indentationSizeSelect.value),
+        inputMode: elements.inputModeSelect.value,
         showHints: elements.showHintsInput.checked,
         errorSoundEnabled: elements.errorSoundInput.checked,
         keypressSoundEnabled: elements.keypressSoundInput.checked,
@@ -640,6 +801,7 @@ function handleSettingsChange() {
 
 function applySettings() {
     document.body.classList.toggle("hide-hints", !state.settings.showHints);
+    document.documentElement.style.setProperty("--indent-size", state.settings.indentationSize);
     if (state.session) {
         renderMetrics();
     }
@@ -666,6 +828,40 @@ function speedForCurrentUnit(speedCpm) {
         value: speedCpm,
         label: "char/min",
     };
+}
+
+function configuredIndent() {
+    if (state.settings.indentationStyle === "spaces") {
+        return " ".repeat(state.settings.indentationSize);
+    }
+    return "\t";
+}
+
+function shiftKeyFor(baseKey) {
+    return leftHandKeys.has(baseKey) ? "shift-right" : "shift-left";
+}
+
+function flashKeys(keyIds, kind) {
+    if (!keyIds?.length) {
+        return;
+    }
+
+    const target = kind === "error" ? state.errorKeys : state.pressedKeys;
+    const duration = kind === "error" ? 360 : 130;
+
+    keyIds.forEach((keyId) => {
+        const timerId = `${kind}:${keyId}`;
+        window.clearTimeout(state.keyFeedbackTimers.get(timerId));
+        target.add(keyId);
+
+        state.keyFeedbackTimers.set(timerId, window.setTimeout(() => {
+            target.delete(keyId);
+            state.keyFeedbackTimers.delete(timerId);
+            renderKeyboard(state.session?.expected ?? "");
+        }, duration));
+    });
+
+    renderKeyboard(state.session?.expected ?? "");
 }
 
 function playInputSound(index) {
