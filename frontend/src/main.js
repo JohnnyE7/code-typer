@@ -400,6 +400,25 @@ function renderCode() {
         row.append(gutter, codeLine);
         elements.codeEditor.appendChild(row);
     });
+
+    requestAnimationFrame(keepCursorVisible);
+}
+
+function keepCursorVisible() {
+    const cursor = elements.codeEditor.querySelector(".code-char.cursor, .tail-cursor");
+    if (!cursor) {
+        return;
+    }
+
+    const editorRect = elements.codeEditor.getBoundingClientRect();
+    const cursorRect = cursor.getBoundingClientRect();
+    const margin = 72;
+
+    if (cursorRect.bottom > editorRect.bottom - margin) {
+        elements.codeEditor.scrollTop += cursorRect.bottom - editorRect.bottom + margin;
+    } else if (cursorRect.top < editorRect.top + margin) {
+        elements.codeEditor.scrollTop -= editorRect.top + margin - cursorRect.top;
+    }
 }
 
 function renderLanguageOptions() {

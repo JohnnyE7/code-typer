@@ -18,10 +18,10 @@ func main() {
 
 	err := wails.Run(&options.App{
 		Title:            "Code Typer",
-		Width:            1280,
-		Height:           840,
-		MinWidth:         980,
-		MinHeight:        700,
+		Width:            1120,
+		Height:           760,
+		MinWidth:         920,
+		MinHeight:        640,
 		BackgroundColour: options.NewRGBA(0, 0, 0, 0),
 		AssetServer: &assetserver.Options{
 			Assets: assets,

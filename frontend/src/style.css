@@ -267,6 +267,18 @@ select:focus,
     box-shadow: 0 0 14px rgba(255, 81, 104, 0.22);
 }
 
+.tab-char {
+    display: inline-block;
+    width: 4ch;
+    height: 1.15em;
+    vertical-align: -0.16em;
+}
+
+.tab-char.incorrect {
+    background: rgba(255, 81, 104, 0.9);
+    box-shadow: 0 0 14px rgba(255, 81, 104, 0.22);
+}
+
 .newline-char {
     display: inline-block;
     width: 54px;
