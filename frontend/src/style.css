@@ -44,6 +44,7 @@ body {
     overflow: hidden;
     background: rgba(0, 0, 0, 0);
     color: var(--text);
+    user-select: none;
 }
 
 button,
@@ -232,6 +233,7 @@ select:focus,
     font-size: 18px;
     line-height: 1.65;
     font-variant-ligatures: none;
+    user-select: text;
     --wails-draggable: no-drag;
 }
 
@@ -254,6 +256,7 @@ select:focus,
     min-width: max-content;
     padding-right: 28px;
     white-space: pre;
+    user-select: text;
 }
 
 .code-char {

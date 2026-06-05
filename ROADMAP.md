@@ -9,8 +9,9 @@
 - Typed buffer model: wrong characters before a newline should appear on the current line and should not advance to the next target line until Enter is actually typed.
 - User audio: choose a custom error sound file, keep the current generated fallback.
 - Theme presets: save and switch complete color/theme presets, including opaque non-translucent app themes.
-- Syntax highlighting toggle: notebook mode without highlighting and IDE mode with highlighting.
-- Frontend decomposition: split the growing `main.js` into focused modules for state, settings, keyboard rendering, typing input, audio, and completion flow.
+- Syntax highlighting research and toggle: evaluate existing web libraries such as Shiki, Prism, Highlight.js, or CodeMirror, then add notebook mode without highlighting and IDE mode with highlighting.
+- Selection polish: only code text should be selectable; UI chrome and line numbers should stay non-selectable.
+- Continue frontend decomposition: split remaining `main.js` responsibilities into focused modules for settings, typing input, audio, and completion flow.
 - Write a useful README with the product idea, local development flow, Wails build flow, and current feature list.
 
 ## Later
@@ -31,3 +32,4 @@
 - README_RUS: Russian product and development documentation.
 - Completion hotkeys: Enter starts the next random exercise, while Cmd+R restarts the current one.
 - Theme controls basics: background opacity and accent color.
+- Frontend decomposition start: extracted keyboard layout and key-mapping helpers into `frontend/src/keyboard.js`.
