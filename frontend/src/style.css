@@ -34,6 +34,8 @@
 
 * {
     box-sizing: border-box;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 html,
@@ -44,7 +46,6 @@ body {
     overflow: hidden;
     background: rgba(0, 0, 0, 0);
     color: var(--text);
-    user-select: none;
 }
 
 button,
@@ -233,7 +234,8 @@ select:focus,
     font-size: 18px;
     line-height: 1.65;
     font-variant-ligatures: none;
-    user-select: text;
+    -webkit-user-select: none;
+    user-select: none;
     --wails-draggable: no-drag;
 }
 
@@ -248,6 +250,7 @@ select:focus,
     padding: 0 18px 0 0;
     color: rgba(255, 255, 255, 0.24);
     text-align: right;
+    -webkit-user-select: none;
     user-select: none;
     font-variant-numeric: tabular-nums;
 }
@@ -256,6 +259,7 @@ select:focus,
     min-width: max-content;
     padding-right: 28px;
     white-space: pre;
+    -webkit-user-select: text;
     user-select: text;
 }
 
@@ -264,6 +268,8 @@ select:focus,
     min-width: 0.6ch;
     color: var(--pending);
     border-radius: 3px;
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 .code-char.correct {
@@ -312,6 +318,8 @@ select:focus,
 .newline-char {
     display: inline-block;
     width: 54px;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .newline-char::after {
@@ -324,6 +332,8 @@ select:focus,
     font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: 10px;
     line-height: 1;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .newline-char.correct::after {
