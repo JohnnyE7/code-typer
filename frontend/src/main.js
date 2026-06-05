@@ -182,6 +182,7 @@ const keyIdByCode = {
 };
 
 const leftHandKeys = new Set(["`", "1", "2", "3", "4", "5", "q", "w", "e", "r", "t", "a", "s", "d", "f", "g", "z", "x", "c", "v", "b"]);
+const heatmapExcludedKeys = new Set(["backspace", "caps", "enter", "shift-left", "shift-right", "control", "option", "option-right", "command-left", "command-right"]);
 const closingPairByOpen = {
     "(": ")",
     "[": "]",
@@ -191,12 +192,13 @@ const closingPairByOpen = {
 };
 
 const settingsStorageKey = "codeTyper.settings.v1";
+const lastResultStorageKey = "codeTyper.lastResult.v1";
 
 const defaultSettings = {
     layout: "qwerty",
     speedUnit: "cpm",
-    indentationStyle: "tabs",
     indentationSize: 4,
+    backgroundOpacity: 58,
     inputMode: "notebook",
     showHints: true,
     errorSoundEnabled: true,
@@ -212,18 +214,20 @@ const state = {
     refreshing: false,
     pressedKeys: new Set(),
     errorKeys: new Set(),
+    heldKeys: new Set(),
     keyFeedbackTimers: new Map(),
     settings: loadSettings(),
+    lastResult: loadLastResult(),
+    mistakeKeys: new Map(),
+    completion: null,
+    completionSignature: "",
     audioContext: null,
 };
 
 document.body.innerHTML = `
 <main class="app-shell">
     <header class="top-bar">
-        <div class="brand">
-            <span class="brand-mark"></span>
-            <span>Code Typer</span>
-        </div>
+        <div></div>
         <div class="metrics" aria-label="Current exercise metrics">
             <div class="metric">
                 <span class="metric-value" id="speedValue">0</span>
@@ -265,6 +269,8 @@ document.body.innerHTML = `
             <div class="code-editor" id="codeEditor" tabindex="0" aria-label="Typing exercise"></div>
         </div>
 
+        <section class="completion-panel" id="completionPanel" hidden></section>
+
         <div class="keyboard" id="keyboard" aria-hidden="true"></div>
     </section>
 
@@ -290,18 +296,18 @@ document.body.innerHTML = `
                     </select>
                 </label>
                 <label class="setting-field">
-                    <span>Indentation</span>
-                    <select id="indentationStyleSelect">
-                        <option value="tabs">Tabs</option>
-                        <option value="spaces">Spaces</option>
-                    </select>
-                </label>
-                <label class="setting-field">
-                    <span>Indent size</span>
+                    <span>Tab width</span>
                     <select id="indentationSizeSelect">
                         <option value="2">2 spaces</option>
                         <option value="4">4 spaces</option>
                     </select>
+                </label>
+                <label class="setting-field">
+                    <span class="setting-field-row">
+                        <span>Background opacity</span>
+                        <span id="backgroundOpacityValue">58%</span>
+                    </span>
+                    <input id="backgroundOpacityInput" type="range" min="40" max="85" step="1">
                 </label>
                 <label class="setting-field">
                     <span>Input mode</span>
@@ -341,13 +347,15 @@ const elements = {
     closeSettingsButton: document.getElementById("closeSettingsButton"),
     layoutSelect: document.getElementById("layoutSelect"),
     speedUnitSelect: document.getElementById("speedUnitSelect"),
-    indentationStyleSelect: document.getElementById("indentationStyleSelect"),
     indentationSizeSelect: document.getElementById("indentationSizeSelect"),
+    backgroundOpacityInput: document.getElementById("backgroundOpacityInput"),
+    backgroundOpacityValue: document.getElementById("backgroundOpacityValue"),
     inputModeSelect: document.getElementById("inputModeSelect"),
     showHintsInput: document.getElementById("showHintsInput"),
     errorSoundInput: document.getElementById("errorSoundInput"),
     keypressSoundInput: document.getElementById("keypressSoundInput"),
     progressFill: document.getElementById("progressFill"),
+    completionPanel: document.getElementById("completionPanel"),
     codeEditor: document.getElementById("codeEditor"),
     keyboard: document.getElementById("keyboard"),
 };
@@ -402,8 +410,8 @@ function bindEvents() {
     });
     elements.layoutSelect.addEventListener("change", handleSettingsChange);
     elements.speedUnitSelect.addEventListener("change", handleSettingsChange);
-    elements.indentationStyleSelect.addEventListener("change", handleSettingsChange);
     elements.indentationSizeSelect.addEventListener("change", handleSettingsChange);
+    elements.backgroundOpacityInput.addEventListener("input", handleSettingsChange);
     elements.inputModeSelect.addEventListener("change", handleSettingsChange);
     elements.showHintsInput.addEventListener("change", handleSettingsChange);
     elements.errorSoundInput.addEventListener("change", handleSettingsChange);
@@ -420,6 +428,12 @@ function bindEvents() {
             return;
         }
 
+        const serviceKeyId = serviceKeyIdForEvent(event);
+        if (serviceKeyId) {
+            state.heldKeys.add(serviceKeyId);
+            renderKeyboard(currentKeyboardExpected(), completionHeatmap());
+        }
+
         const action = normalizeKey(event);
         if (!action) {
             return;
@@ -429,15 +443,40 @@ function bindEvents() {
         event.preventDefault();
         state.queue = state.queue.then(() => applyInput(action));
     });
+
+    window.addEventListener("keyup", (event) => {
+        const serviceKeyId = serviceKeyIdForEvent(event);
+        if (!serviceKeyId) {
+            return;
+        }
+        state.heldKeys.delete(serviceKeyId);
+        renderKeyboard(currentKeyboardExpected(), completionHeatmap());
+    });
+
+    window.addEventListener("blur", () => {
+        state.heldKeys.clear();
+        renderKeyboard(currentKeyboardExpected(), completionHeatmap());
+    });
 }
 
 async function startSelectedExercise() {
+    state.completion = null;
+    state.completionSignature = "";
+    state.mistakeKeys = new Map();
     state.session = await StartExercise(state.selectedExerciseId);
     render();
     elements.codeEditor.focus();
 }
 
 async function applyInput(action) {
+    if (state.session?.stats.complete) {
+        if (action.type === "input" && action.source === "enter") {
+            flashKeys(action.keyIds, "pressed");
+            await startSelectedExercise();
+        }
+        return;
+    }
+
     const previousIndex = state.session?.stats.index ?? 0;
 
     if (action.type === "backspace") {
@@ -446,7 +485,9 @@ async function applyInput(action) {
     } else {
         const input = inputForAction(action);
         state.session = await HandleInput(input);
-        flashKeys(action.keyIds, inputHasError(previousIndex, input.length) ? "error" : "pressed");
+        const mistakeKeyIds = mistakeKeysForInput(previousIndex, input.length);
+        recordMistakeKeys(mistakeKeyIds);
+        flashKeys(action.keyIds, mistakeKeyIds.length > 0 ? "error" : "pressed");
         playInputSound(previousIndex);
     }
     render();
@@ -486,7 +527,7 @@ function normalizeKey(event) {
         return { type: "input", value: "\n", source: "enter" };
     }
     if (event.code === "Tab") {
-        return { type: "input", value: configuredIndent(), source: "tab" };
+        return { type: "input", value: "\t", source: "tab" };
     }
 
     const physicalChar = physicalCodeToChar(event);
@@ -539,10 +580,6 @@ function inputForAction(action) {
         return action.value;
     }
 
-    if (action.source === "tab" && /^ +$/.test(action.value) && state.session.expected === "\t") {
-        return "\t";
-    }
-
     if (state.settings.inputMode !== "ide") {
         return action.value;
     }
@@ -557,10 +594,18 @@ function inputForAction(action) {
     return action.value + closingPair;
 }
 
-function inputHasError(index, length) {
+function mistakeKeysForInput(index, length) {
     return state.session.render
         .slice(index, index + length)
-        .some((char) => char.state === "incorrect");
+        .filter((char) => char.state === "incorrect")
+        .flatMap((char) => keyIdsForChar(char.char))
+        .filter((keyId) => !heatmapExcludedKeys.has(keyId));
+}
+
+function recordMistakeKeys(keyIds) {
+    keyIds.forEach((keyId) => {
+        state.mistakeKeys.set(keyId, (state.mistakeKeys.get(keyId) ?? 0) + 1);
+    });
 }
 
 function render() {
@@ -570,7 +615,8 @@ function render() {
 
     renderMetrics();
     renderCode();
-    renderKeyboard(state.session.expected);
+    renderCompletion();
+    renderKeyboard(state.session.stats.complete ? "\n" : state.session.expected, completionHeatmap());
 }
 
 function renderMetrics() {
@@ -581,6 +627,55 @@ function renderMetrics() {
     elements.accuracyValue.textContent = `${stats.accuracy}%`;
     elements.typosValue.textContent = stats.typos;
     elements.progressFill.style.width = `${Math.max(0, Math.min(1, stats.progress)) * 100}%`;
+}
+
+function renderCompletion() {
+    if (!state.session.stats.complete) {
+        elements.completionPanel.hidden = true;
+        elements.completionPanel.innerHTML = "";
+        return;
+    }
+
+    currentCompletion();
+    elements.completionPanel.hidden = true;
+    elements.completionPanel.textContent = "";
+}
+
+function currentCompletion() {
+    const stats = state.session.stats;
+    const signature = [
+        state.selectedExerciseId,
+        stats.elapsedMs,
+        stats.typedCount,
+        stats.correctCount,
+        stats.typos,
+    ].join(":");
+
+    if (state.completionSignature === signature && state.completion) {
+        return state.completion;
+    }
+
+    const current = {
+        exerciseId: state.selectedExerciseId,
+        language: state.selectedLanguage,
+        speedCpm: stats.speedCpm,
+        accuracy: stats.accuracy,
+        typos: stats.typos,
+        completedAt: new Date().toISOString(),
+    };
+    const previous = state.lastResult;
+    const delta = {
+        speedCpm: previous ? current.speedCpm - previous.speedCpm : null,
+        accuracy: previous ? current.accuracy - previous.accuracy : null,
+        typos: previous ? current.typos - previous.typos : null,
+    };
+
+    state.completion = { current, previous, delta };
+    state.completionSignature = signature;
+    state.lastResult = current;
+    saveLastResult(current);
+
+    return state.completion;
 }
 
 function renderCode() {
@@ -687,8 +782,9 @@ function filteredExercises() {
     return state.exercises.filter((exercise) => exercise.language === state.selectedLanguage);
 }
 
-function renderKeyboard(expected) {
+function renderKeyboard(expected, heatmap = new Map()) {
     const activeKeys = expectedKeys(expected);
+    const maxHeat = Math.max(0, ...heatmap.values());
     elements.keyboard.innerHTML = "";
 
     keyboardLayout.forEach((row) => {
@@ -700,6 +796,10 @@ function renderKeyboard(expected) {
             keyEl.className = "keyboard-key";
             keyEl.style.flex = String(item.width);
             keyEl.textContent = item.label;
+            const heat = heatmap.get(item.id) ?? 0;
+            if (heat > 0 && maxHeat > 0) {
+                keyEl.classList.add(`heat-${Math.max(1, Math.min(4, Math.ceil((heat / maxHeat) * 4)))}`);
+            }
             if (activeKeys.has(item.id)) {
                 keyEl.classList.add("expected");
             }
@@ -708,6 +808,9 @@ function renderKeyboard(expected) {
             }
             if (state.errorKeys.has(item.id)) {
                 keyEl.classList.add("error");
+            }
+            if (state.heldKeys.has(item.id)) {
+                keyEl.classList.add("held");
             }
             rowEl.appendChild(keyEl);
         });
@@ -753,6 +856,33 @@ function expectedKeys(expected) {
     return keys;
 }
 
+function completionHeatmap() {
+    if (!state.session?.stats.complete) {
+        return new Map();
+    }
+    return new Map(state.mistakeKeys);
+}
+
+function keyIdsForChar(char) {
+    if (char === "\n") {
+        return ["enter"];
+    }
+    if (char === "\t") {
+        return ["tab"];
+    }
+    if (char === " ") {
+        return ["space"];
+    }
+    if (/[A-Z]/.test(char)) {
+        return [shiftKeyFor(char.toLowerCase()), char.toLowerCase()];
+    }
+    if (shiftMap[char]) {
+        const baseKey = shiftMap[char];
+        return [shiftKeyFor(baseKey), baseKey];
+    }
+    return [char.toLowerCase()];
+}
+
 function key(id, label, chars = [], width = 1, group = id) {
     return { id, label, chars, width, group };
 }
@@ -769,6 +899,19 @@ function loadSettings() {
     }
 }
 
+function loadLastResult() {
+    try {
+        const saved = localStorage.getItem(lastResultStorageKey);
+        return saved ? JSON.parse(saved) : null;
+    } catch {
+        return null;
+    }
+}
+
+function saveLastResult(result) {
+    localStorage.setItem(lastResultStorageKey, JSON.stringify(result));
+}
+
 function saveSettings() {
     localStorage.setItem(settingsStorageKey, JSON.stringify(state.settings));
 }
@@ -776,8 +919,9 @@ function saveSettings() {
 function renderSettingsForm() {
     elements.layoutSelect.value = state.settings.layout;
     elements.speedUnitSelect.value = state.settings.speedUnit;
-    elements.indentationStyleSelect.value = state.settings.indentationStyle;
     elements.indentationSizeSelect.value = String(state.settings.indentationSize);
+    elements.backgroundOpacityInput.value = String(normalizedBackgroundOpacity());
+    elements.backgroundOpacityValue.textContent = `${normalizedBackgroundOpacity()}%`;
     elements.inputModeSelect.value = state.settings.inputMode;
     elements.showHintsInput.checked = state.settings.showHints;
     elements.errorSoundInput.checked = state.settings.errorSoundEnabled;
@@ -788,8 +932,8 @@ function handleSettingsChange() {
     state.settings = {
         layout: elements.layoutSelect.value,
         speedUnit: elements.speedUnitSelect.value,
-        indentationStyle: elements.indentationStyleSelect.value,
         indentationSize: Number(elements.indentationSizeSelect.value),
+        backgroundOpacity: Number(elements.backgroundOpacityInput.value),
         inputMode: elements.inputModeSelect.value,
         showHints: elements.showHintsInput.checked,
         errorSoundEnabled: elements.errorSoundInput.checked,
@@ -802,9 +946,22 @@ function handleSettingsChange() {
 function applySettings() {
     document.body.classList.toggle("hide-hints", !state.settings.showHints);
     document.documentElement.style.setProperty("--indent-size", state.settings.indentationSize);
+    applyBackgroundOpacity();
     if (state.session) {
         renderMetrics();
     }
+}
+
+function applyBackgroundOpacity() {
+    const opacityPercent = normalizedBackgroundOpacity();
+    const opacity = opacityPercent / 100;
+    const root = document.documentElement;
+
+    elements.backgroundOpacityValue.textContent = `${opacityPercent}%`;
+    root.style.setProperty("--app-bg-opacity", opacity.toFixed(2));
+    root.style.setProperty("--app-warm-opacity", (opacity * 0.5).toFixed(2));
+    root.style.setProperty("--app-mid-opacity", (opacity * 0.75).toFixed(2));
+    root.style.setProperty("--app-cool-opacity", (opacity * 0.9).toFixed(2));
 }
 
 function openSettings() {
@@ -830,15 +987,41 @@ function speedForCurrentUnit(speedCpm) {
     };
 }
 
-function configuredIndent() {
-    if (state.settings.indentationStyle === "spaces") {
-        return " ".repeat(state.settings.indentationSize);
+function normalizedBackgroundOpacity() {
+    const value = Number(state.settings.backgroundOpacity);
+    if (!Number.isFinite(value)) {
+        return defaultSettings.backgroundOpacity;
     }
-    return "\t";
+    return Math.max(40, Math.min(85, value));
 }
 
 function shiftKeyFor(baseKey) {
     return leftHandKeys.has(baseKey) ? "shift-right" : "shift-left";
+}
+
+function serviceKeyIdForEvent(event) {
+    if (event.code === "ShiftLeft") {
+        return "shift-left";
+    }
+    if (event.code === "ShiftRight") {
+        return "shift-right";
+    }
+    if (event.code === "ControlLeft" || event.code === "ControlRight") {
+        return "control";
+    }
+    if (event.code === "AltLeft") {
+        return "option";
+    }
+    if (event.code === "AltRight") {
+        return "option-right";
+    }
+    if (event.code === "MetaLeft") {
+        return "command-left";
+    }
+    if (event.code === "MetaRight") {
+        return "command-right";
+    }
+    return "";
 }
 
 function flashKeys(keyIds, kind) {
@@ -857,11 +1040,18 @@ function flashKeys(keyIds, kind) {
         state.keyFeedbackTimers.set(timerId, window.setTimeout(() => {
             target.delete(keyId);
             state.keyFeedbackTimers.delete(timerId);
-            renderKeyboard(state.session?.expected ?? "");
+            renderKeyboard(currentKeyboardExpected(), completionHeatmap());
         }, duration));
     });
 
-    renderKeyboard(state.session?.expected ?? "");
+    renderKeyboard(currentKeyboardExpected(), completionHeatmap());
+}
+
+function currentKeyboardExpected() {
+    if (!state.session) {
+        return "";
+    }
+    return state.session.stats.complete ? "\n" : state.session.expected;
 }
 
 function playInputSound(index) {
