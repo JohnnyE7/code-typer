@@ -6,7 +6,6 @@ import {
     keyboardLayout,
     keyIdsForChar,
     keyIdsForEvent,
-    physicalCodeToChar,
     serviceKeyIdForEvent,
 } from "./keyboard";
 import {
@@ -16,6 +15,7 @@ import {
     renderSettingsForm as renderSettingsFields,
     saveSettings,
 } from "./settings";
+import { inputForAction, isRestartShortcut, normalizeKey } from "./typing";
 import {
     Backspace,
     GetSession,
@@ -23,14 +23,6 @@ import {
     ListExercises,
     StartExercise,
 } from "../wailsjs/go/main/App";
-
-const closingPairByOpen = {
-    "(": ")",
-    "[": "]",
-    "{": "}",
-    "\"": "\"",
-    "'": "'",
-};
 
 const lastResultStorageKey = "codeTyper.lastResult.v1";
 
@@ -340,7 +332,7 @@ async function applyInput(action) {
         state.session = await Backspace();
         flashKeys(action.keyIds, "pressed");
     } else {
-        const input = inputForAction(action);
+        const input = inputForAction(action, state.session, state.settings.inputMode);
         state.session = await HandleInput(input);
         const mistakeKeyIds = mistakeKeysForInput(previousIndex, input.length);
         recordMistakeKeys(mistakeKeyIds);
@@ -370,52 +362,6 @@ async function refreshSessionStats() {
             state.refreshing = false;
         }
     });
-}
-
-function normalizeKey(event) {
-    if (event.metaKey || event.ctrlKey || event.altKey) {
-        return null;
-    }
-
-    if (event.code === "Backspace") {
-        return { type: "backspace" };
-    }
-    if (event.code === "Enter") {
-        return { type: "input", value: "\n", source: "enter" };
-    }
-    if (event.code === "Tab") {
-        return { type: "input", value: "\t", source: "tab" };
-    }
-
-    const physicalChar = physicalCodeToChar(event);
-    if (physicalChar) {
-        return { type: "input", value: physicalChar, source: "key" };
-    }
-
-    return null;
-}
-
-function inputForAction(action) {
-    if (!state.session?.expected) {
-        return action.value;
-    }
-
-    if (state.settings.inputMode !== "ide") {
-        return action.value;
-    }
-
-    const expected = state.session.expected;
-    const closingPair = closingPairByOpen[action.value];
-    const nextChar = state.session.render[state.session.stats.index + 1]?.char;
-    if (!closingPair || expected !== action.value || nextChar !== closingPair) {
-        return action.value;
-    }
-
-    return action.value + closingPair;
-}
-
-function isRestartShortcut(event) {
-    return event.metaKey && event.code === "KeyR" && !event.ctrlKey && !event.altKey;
 }
 
 async function restartCurrentExercise(keyIds = []) {
